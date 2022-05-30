@@ -7,6 +7,8 @@
 #include "syscall.h"
 #include "defs.h"
 
+#define FMT_TRACE "%d:\t%s\t->\t%d\n"
+
 // Fetch the uint64 at addr from the current process.
 int
 fetchaddr(uint64 addr, uint64 *ip)
@@ -104,6 +106,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
+extern uint64 sys_trace(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -127,6 +130,32 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_trace]    sys_trace,
+};
+
+static char * syscall_name[] = {
+         [SYS_fork]      "sys fork",
+         [SYS_exit]      "sys exit",
+         [SYS_wait]      "sys wait",
+         [SYS_pipe]      "sys pipe",
+         [SYS_read]      "sys read",
+         [SYS_kill]      "sys kill",
+         [SYS_exec]      "sys exec",
+         [SYS_fstat]     "sys fstat",
+         [SYS_chdir]     "sys chdir",
+         [SYS_dup]       "sys dup",
+         [SYS_getpid]    "sys getpid",
+         [SYS_sbrk]      "sys sbrk",
+         [SYS_sleep]     "sys sleep",
+         [SYS_uptime]    "sys uptime",
+         [SYS_open]      "sys open",
+         [SYS_write]     "sys write",
+         [SYS_mknod]     "sys mknod",
+         [SYS_unlink]    "sys unlink",
+         [SYS_link]      "sys link",
+         [SYS_mkdir]     "sys mkdir",
+         [SYS_close]     "sys close",
+         [SYS_trace]     "sys trace",
 };
 
 void
@@ -138,6 +167,9 @@ syscall(void)
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     p->trapframe->a0 = syscalls[num]();
+    if((num & p->syscall_mask) != 0){ // print if the syscall invoked is in the tracing mask
+        printf(FMT_TRACE, sys_getpid(), syscall_name[num], p->trapframe->a0);
+    }
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);

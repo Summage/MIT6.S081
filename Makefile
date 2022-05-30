@@ -201,6 +201,7 @@ UPROGS=\
 	$U/_find\
 	$U/_list\
 	$U/_xargs\
+	$U/_trace\
 
 
 
