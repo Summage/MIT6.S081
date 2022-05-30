@@ -22,7 +22,7 @@ int main(int argc, int * argv[]){
         // dup(p[1][W]);
         close(p[0][W]);
         close(p[1][R]);
-        if(read(p[0][R], buf, 1)){
+        if(read(p[0][R], buf, 1) > 0){
             printf(FMT_PING, getpid());
             write(p[1][W], buf, 1);
         }else{
@@ -32,7 +32,7 @@ int main(int argc, int * argv[]){
         close(p[0][R]);
         close(p[1][W]);
         write(p[0][W], buf, 1);
-        if(read(p[1][R], buf, 1)) {
+        if(read(p[1][R], buf, 1) > 0) {
             printf(FMT_PONG, getpid());
         }else{
             exit(-1);
