@@ -200,6 +200,7 @@ UPROGS=\
 	$U/_test\
 	$U/_find\
 	$U/_list\
+	$U/_xargs\
 
 
 
