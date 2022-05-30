@@ -17,25 +17,25 @@ int main(int argc, char * argv[]){
     }else {
         close(p[0]);
         for (uint32 i = 3; i < 35; i += base)
-            write(p[1], &i, 4);
+            write(p[1], &i, sizeof(uint32));
         close(p[1]); // close write end of the pipe
         goto end;
     }
 sub:
     REDIR_2_IN(p[0]); // re-dir input to the prv pipe
     close(p[1]); // close the prv output
-    flag = read(0, &base, 4); // reset the base
+    flag = read(0, &base, sizeof(uint32)); // reset the base
     switch (flag) {
         case 0: goto end; break; // one beyond the last one
-        case 4: printf("%d\n", base); break;
+        case sizeof(uint32): printf("%d\n", base); break;
         default: flag = -1; goto end; break; // failure
     }
     pipe(p);
     if(fork() == 0) // this will cause one redundancy
         goto sub;
-    while((flag = read(0, &cur, 4)) == 4){
+    while((flag = read(0, &cur, sizeof(uint32))) == sizeof(uint32)){
         if (cur % base != 0)
-            write(p[1], &cur, 4);
+            write(p[1], &cur, sizeof(uint32));
     }
     close(p[1]); // close write end of the pipe
     if(flag != 0)
