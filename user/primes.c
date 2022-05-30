@@ -5,7 +5,7 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-#define REDIR_2_IN(x) close(0), dup(x), close(x)
+#define REDIR_2_IN(x) close(0), dup(x), close(x);
 
 int main(int argc, char * argv[]){
     uint32 base = 2, cur, flag = 0;
@@ -15,6 +15,7 @@ int main(int argc, char * argv[]){
     if(fork() == 0){
         goto sub;
     }else {
+        close(p[0]);
         for (uint32 i = 3; i < 35; i += base)
             write(p[1], &i, 4);
         close(p[1]); // close write end of the pipe
@@ -33,7 +34,6 @@ sub:
     if(fork() == 0) // this will cause one redundancy
         goto sub;
     while((flag = read(0, &cur, 4)) == 4){
-        flag = read(0, &cur, 4);
         if (cur % base != 0)
             write(p[1], &cur, 4);
     }
