@@ -432,3 +432,39 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+#define FMT_PGTBL "page table 0x%p\n"
+#define FMT_PTE_LEVEL1 " ..%d: pte 0x%p pa 0x%p\n"
+#define FMT_PTE_LEVEL2 " .. ..%d: pte 0x%p pa 0x%p\n"
+#define FMT_PTE_LEVEL3 " .. .. ..%d:pte 0x%p pa 0x%p\n"
+#define FMT_PTE_LEVEL(x) FMT_PTE_LEVEL## x
+
+// print page table
+void vm_vmprint(pagetable_t pagetable, int depth){
+    char * fmt;
+    switch(depth){
+        case 1: fmt = FMT_PTE_LEVEL(1); break;
+        case 2: fmt = FMT_PTE_LEVEL(2); break;
+        case 3: fmt = FMT_PTE_LEVEL(3); break;
+        default:
+            return;
+    }
+    for(int i = 0; i < 512; ++i){
+        pte_t pte = pagetable[i];
+        if(pte & PTE_V){
+            if((pte&(PTE_R|PTE_W|PTE_X)) == 0) {
+                uint64 child = PTE2PA(pte);
+                vm_vmprint((pagetable_t) child, depth + 1);
+            }else{
+                printf(fmt, i, pte, PTE2PA(pte));
+            }
+        }
+    }
+}
+
+void vmprint(pagetable_t pagetable){
+    printf(FMT_PGTBL, pagetable);
+    vm_vmprint(pagetable, 1);
+}
+
+
