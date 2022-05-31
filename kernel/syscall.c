@@ -7,7 +7,7 @@
 #include "syscall.h"
 #include "defs.h"
 
-#define FMT_TRACE "%d:\t%s\t->\t%d\n"
+#define FMT_TRACE "%d: %s -> %d\n"
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -136,29 +136,29 @@ static uint64 (*syscalls[])(void) = {
 };
 
 static char * syscall_name[] = {
-        [SYS_fork]      "sys fork",
-        [SYS_exit]      "sys exit",
-        [SYS_wait]      "sys wait",
-        [SYS_pipe]      "sys pipe",
-        [SYS_read]      "sys read",
-        [SYS_kill]      "sys kill",
-        [SYS_exec]      "sys exec",
-        [SYS_fstat]     "sys fstat",
-        [SYS_chdir]     "sys chdir",
-        [SYS_dup]       "sys dup",
-        [SYS_getpid]    "sys getpid",
-        [SYS_sbrk]      "sys sbrk",
-        [SYS_sleep]     "sys sleep",
-        [SYS_uptime]    "sys uptime",
-        [SYS_open]      "sys open",
-        [SYS_write]     "sys write",
-        [SYS_mknod]     "sys mknod",
-        [SYS_unlink]    "sys unlink",
-        [SYS_link]      "sys link",
-        [SYS_mkdir]     "sys mkdir",
-        [SYS_close]     "sys close",
-        [SYS_trace]     "sys trace",
-        [SYS_sysinfo]   "sys sysinfo",
+        [SYS_fork]      "syscall fork",
+        [SYS_exit]      "syscall exit",
+        [SYS_wait]      "syscall wait",
+        [SYS_pipe]      "syscall pipe",
+        [SYS_read]      "syscall read",
+        [SYS_kill]      "syscall kill",
+        [SYS_exec]      "syscall exec",
+        [SYS_fstat]     "syscall fstat",
+        [SYS_chdir]     "syscall chdir",
+        [SYS_dup]       "syscall dup",
+        [SYS_getpid]    "syscall getpid",
+        [SYS_sbrk]      "syscall sbrk",
+        [SYS_sleep]     "syscall sleep",
+        [SYS_uptime]    "syscall uptime",
+        [SYS_open]      "syscall open",
+        [SYS_write]     "syscall write",
+        [SYS_mknod]     "syscall mknod",
+        [SYS_unlink]    "syscall unlink",
+        [SYS_link]      "syscall link",
+        [SYS_mkdir]     "syscall mkdir",
+        [SYS_close]     "syscall close",
+        [SYS_trace]     "syscall trace",
+        [SYS_sysinfo]   "syscall sysinfo",
 };
 
 void
@@ -170,7 +170,7 @@ syscall(void)
     num = p->trapframe->a7;
     if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
         p->trapframe->a0 = syscalls[num]();
-        if((num & p->syscall_mask) != 0){ // print if the syscall invoked is in the tracing mask
+        if(((1<<num) & p->syscall_mask) != 0){ // print if the syscall invoked is in the tracing mask
             printf(FMT_TRACE, sys_getpid(), syscall_name[num], p->trapframe->a0);
         }
     } else {

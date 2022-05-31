@@ -105,7 +105,7 @@ uint64 sys_trace(void){
         return -1;
     }
     p->syscall_mask = mask;
-    return mask;
+    return 0;
 }
 
 // return how the number of free mem and used proc now
