@@ -166,6 +166,20 @@ freeproc(struct proc *p)
   p->state = UNUSED;
 }
 
+// Count how many proc are alloced now
+uint countproc(void){
+    struct proc * p;
+    uint count = 0;
+    for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if (p->state != UNUSED)
+            ++count;
+        release(&p->lock);
+    }
+    return count;
+}
+
+
 // Create a user page table for a given process,
 // with no user memory, but with trampoline pages.
 pagetable_t
@@ -300,6 +314,9 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+
+  // summage copy mask for tracing
+  np->syscall_mask = p->syscall_mask;
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
