@@ -202,6 +202,7 @@ UPROGS=\
 	$U/_list\
 	$U/_xargs\
 	$U/_trace\
+	$U/_sysinfotest\
 
 
 

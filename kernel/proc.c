@@ -166,6 +166,19 @@ freeproc(struct proc *p)
   p->state = UNUSED;
 }
 
+// Count how many proc are alloced now
+uint countproc(void){
+    struct proc * p;
+    uint count = 0;
+    for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if (p->state == USED)
+            ++count;
+        release(&p->lock);
+    }
+    return count;
+}
+
 // Create a user page table for a given process,
 // with no user memory, but with trampoline pages.
 pagetable_t

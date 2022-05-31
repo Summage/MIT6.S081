@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64
 sys_exit(void)
@@ -105,4 +106,21 @@ uint64 sys_trace(void){
     }
     p->syscall_mask = mask;
     return mask;
+}
+
+// return how the number of free mem and used proc now
+uint64 sys_sysinfo(void){
+    uint64 addr;
+    if( argaddr(0, &addr) < 0){
+        return -1;
+    }
+
+    struct sysinfo info;
+    info.freemem = kcount();
+    info.nproc = countproc();
+
+    struct proc * p = myproc();
+    if(copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+        return -1;
+    return 0;
 }
