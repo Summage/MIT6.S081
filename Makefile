@@ -195,6 +195,11 @@ UPROGS=\
 	$U/_zombie\
 	$U/_trace\
 	$U/_sysinfotest\
+	$U/_list\
+	$U/_pingpong\
+	$U/_primes\
+	$U/_xargs\
+	$U/_find\
 
 
 
