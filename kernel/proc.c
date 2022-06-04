@@ -52,7 +52,7 @@ procinit(void)
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
-      p->kstack = KSTACK((int) (p - proc));
+      //p->kstack = KSTACK((int) (p - proc)); // now done by allocproc
   }
 }
 
@@ -127,14 +127,21 @@ found:
     return 0;
   }
   p->usyscall->pid = p->pid;
-  // An empty user page table.
+  // An empty user page table and a initialized kernel page table.
   p->pagetable = proc_pagetable(p);
-  if(p->pagetable == 0){
+//    vmprint(p->pagetable);
+  p->kpagetable = proc_kpagetable(p);
+//    vmprint(p->kpagetable);
+  if(p->pagetable == 0 || p->kpagetable == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
   }
-
+  char * pa = kalloc();
+  if(pa == 0)
+      panic("kalloc: kstack per proc");
+  p->kstack = KSTACK((int)(p - proc));
+  ukvmmap(p->kpagetable, p->kstack, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -159,6 +166,9 @@ freeproc(struct proc *p)
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
+  if(p->kpagetable)
+      proc_freekpagetable(p->kpagetable, p->kstack);
+  p->kpagetable = 0;
   p->sz = 0;
   p->pid = 0;
   p->parent = 0;
@@ -210,6 +220,9 @@ proc_pagetable(struct proc *p)
   return pagetable;
 }
 
+pagetable_t proc_kpagetable(struct proc *p){
+    return ukvminit();
+}
 // Free a process's page table, and free the
 // physical memory it refers to.
 void
@@ -219,6 +232,13 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
+}
+void proc_freekpagetable(pagetable_t pagetable, uint64 va){
+    pte_t * pte = walk(pagetable, va, 0);
+    if(pte == 0)
+        panic("freeproc: walk");
+    kfree((void*) PTE2PA(*pte));
+    unmapwalk(pagetable);
 }
 
 // a user program that calls exec("/init")
@@ -465,11 +485,15 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        // change to the running proc`s kernel page table
+        w_satp(MAKE_SATP(p->kpagetable));
+        sfence_vma();
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+        kvminithart(); // change back to the kernel page table
       }
       release(&p->lock);
     }

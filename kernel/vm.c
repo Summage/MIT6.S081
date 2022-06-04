@@ -20,10 +20,8 @@ pagetable_t
 kvmmake(void)
 {
   pagetable_t kpgtbl;
-
   kpgtbl = (pagetable_t) kalloc();
   memset(kpgtbl, 0, PGSIZE);
-
   // uart registers
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
@@ -45,8 +43,23 @@ kvmmake(void)
 
   // map kernel stacks
   proc_mapstacks(kpgtbl);
-  
   return kpgtbl;
+}
+
+pagetable_t ukvmmake(void){
+    pagetable_t ukpgtbl = (pagetable_t) kalloc();
+    memset(ukpgtbl, 0, PGSIZE);
+//    for(int i = 0; i < 512; ++i){
+//        if(kernel_pagetable[i] & PTE_V)
+//            ukpgtbl[i] = kernel_pagetable[i];
+//    }
+    ukvmmap(ukpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+    ukvmmap(ukpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+    ukvmmap(ukpgtbl, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+    ukvmmap(ukpgtbl, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+    ukvmmap(ukpgtbl, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+    ukvmmap(ukpgtbl, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+    return ukpgtbl;
 }
 
 // Initialize the one kernel_pagetable
@@ -54,6 +67,10 @@ void
 kvminit(void)
 {
   kernel_pagetable = kvmmake();
+}
+// Initialize a kernel page table for a proc
+pagetable_t ukvminit(void){
+    return ukvmmake();
 }
 
 // Switch h/w page table register to the kernel's page table,
@@ -130,6 +147,10 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
     panic("kvmmap");
 }
 
+void ukvmmap(pagetable_t ukpgtbl, uint64 va, uint64 pa, uint64 sz, int perm){
+    if(mappages(ukpgtbl, va, sz, pa, perm) != 0)
+        panic("ukvmmap");
+}
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
@@ -279,6 +300,19 @@ freewalk(pagetable_t pagetable)
     }
   }
   kfree((void*)pagetable);
+}
+// Recursively free page-table pages
+void unmapwalk(pagetable_t pgtbl){
+    for(int i = 0; i < 512; i++){
+        pte_t pte = pgtbl[i];
+        if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+            // this PTE points to a lower-level page table.
+            uint64 child = PTE2PA(pte);
+            unmapwalk((pagetable_t)child);
+            pgtbl[i] = 0;
+        }
+    }
+    kfree((void*)pgtbl);
 }
 
 // Free user memory pages,
