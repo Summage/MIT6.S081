@@ -179,6 +179,24 @@ freeproc(struct proc *p)
   p->state = UNUSED;
 }
 
+int pgaccess(uint64 va, int num, uint64 dstva){
+  if(num > 64) num = 64;
+  struct proc * p = myproc();
+  uint64 mask = 0;
+  va = PGROUNDDOWN(va);
+  for(int i = 0; i < num; ++i, va += PGSIZE){
+    pte_t * pte = walk(p->pagetable, va, 0);
+    if(pte == 0)
+      break;
+    if((*pte)&PTE_A){
+      (*pte) &= ~PTE_A;
+      mask |= 1L << i;      
+    }
+  }
+  if(copyout(p->pagetable, dstva, (char *)&mask, sizeof(uint64)) < 0) 
+    return -1;
+  return 0;
+}
 // Create a user page table for a given process,
 // with no user memory, but with trampoline pages.
 pagetable_t
