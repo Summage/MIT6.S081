@@ -44,13 +44,22 @@ sys_sbrk(void)
   int addr;
   int n;
 
-  if(argint(0, &n) < 0)
-    return -1;
+  // if(argint(0, &n) < 0)
+  //   return -1;
+  argint(0, &n);
   struct proc * p = myproc();
   addr = p->sz;
-  p->sz += n;
-  // if(growproc(n) < 0)
-  //   return -1;
+  if(n >= 0){
+    p->sz += n;
+  }else{
+    if(growproc(n) < 0)
+      return -1;
+    // p->sz += n;
+    // addr = p->sz;
+    // if(p->sz < PGROUNDDOWN(p->sz - n)){
+    //   uvmunmap(p->pagetable, PGROUNDUP(p->sz), (PGROUNDUP(p->sz-n)-PGROUNDUP(p->sz))/PGSIZE, 1);
+    // }
+  }
   return addr;
 }
 

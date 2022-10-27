@@ -67,12 +67,45 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if((r_scause() & ~2) == 0xD){ // page fault
+    uint64 va = PGROUNDDOWN(r_stval()); // get the va causing fault and then align it
+    
+    if(va >= PGROUNDUP(myproc()->sz)){ // out of the range of lazy allocation
+      printf("usertrap(): access to a unalloced visual address. scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+      goto usertrap_kill;
+    }
+
+    if(va < p->trapframe->sp){ // access to the guard page
+      printf("usertrap(): access to user stack guard page. scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+      goto usertrap_kill;
+    }
+
+    pagetable_t pagetable = myproc()->pagetable; 
+    char * mem = kalloc();
+    if(mem == 0){
+      printf("usertrap(): failed to alloc space. scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+      goto usertrap_kill;
+    }else if(mappages(pagetable, va, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+      kfree(mem);
+      printf("usertrap(): failed to map page. scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+      goto usertrap_kill;
+    }
+    memset(mem, 0, PGSIZE);
+  }else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
+    goto usertrap_kill;
   }
-
+usertrap_kill:
   if(p->killed)
     exit(-1);
 
