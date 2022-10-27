@@ -67,12 +67,38 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
+  } else if(r_scause() == 15){ // Write storage error
+    uint64 va = PGROUNDDOWN(r_stval());
+    struct proc * p = myproc();
+    if(va >= MAXVA || va >= p->sz){
+      printf("usertrap(): writing out of boundary scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      setkilled(p);
+      goto usertrap_kill;
+    }
+    pte_t * pte = walk(p->pagetable, va, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_C) == 0 || (*pte & PTE_U) == 0){
+      printf("usertrap(): writing to an invalid va scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      setkilled(p);
+      goto usertrap_kill;
+    }
+    if(kref(PTE2PA(*pte), 0) == 1){ // now the page is only refed by the current proc
+      *pte = (*pte | PTE_W) & ~PTE_C;
+    }else{ // alloc and copy is needed
+      if(cow(p->pagetable, va) == 0){
+        printf("usertrap(): failed to alloc required page scause %p pid=%d\n", r_scause(), p->pid);
+        printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+        setkilled(p);
+        goto usertrap_kill;
+      }
+    }
+  }else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);
   }
-
+usertrap_kill:
   if(killed(p))
     exit(-1);
 
