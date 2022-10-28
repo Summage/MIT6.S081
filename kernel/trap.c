@@ -84,7 +84,7 @@ usertrap(void)
       setkilled(p);
       goto usertrap_kill;
     }
-    if(kref(PTE2PA(*pte), 0) == 1){ // now the page is only refed by the current proc
+    if(kaddref(PTE2PA(*pte), 0) == 1){ // now the page is only refed by the current proc
       *pte = (*pte | PTE_W) & ~PTE_C;
     }else{ // alloc and copy is needed
       if(cow(p->pagetable, va) == 0){

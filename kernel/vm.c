@@ -316,8 +316,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
-    kref(pa, 1); // add a ref to the target physical page
-    *pte = (*pte & ~PTE_W) | PTE_C; // both parent and child page should be dis-writable and be marked as COW
+    kaddref(pa, 1); // add a ref to the target physical page
+    if((*pte & PTE_W) != 0) 
+      *pte = (*pte & ~PTE_W) | PTE_C; // both parent and child page should be dis-writable and be marked as COW
     flags = PTE_FLAGS(*pte); 
     mem = PTE2PA(*pte);
     if(mappages(new, i, PGSIZE, mem, flags) != 0){
@@ -358,7 +359,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
-    if(kref(pa0, 0) > 1){
+    if(kaddref(pa0, 0) > 1){
       if((pa0 = (uint64)cow(pagetable, va0)) == 0)
         panic("copyout: failed to exec cow!");
     }

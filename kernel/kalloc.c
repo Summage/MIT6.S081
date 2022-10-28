@@ -23,19 +23,23 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-  uint8 page_ref[(PHYSTOP - PGROUNDUP(KERNBASE)) / PGSIZE];
 } kmem;
+
+struct{
+  struct spinlock lock;
+  uint8 page_ref[(PHYSTOP - PGROUNDUP(KERNBASE)) / PGSIZE];
+} kref;
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
-  acquire(&kmem.lock);
+  initlock(&kref.lock, "kref");
+  acquire(&kref.lock);
   // set all pages` ref count to 1 so that kfree can work properly
-  // memset(kmem.page_ref, 1, INDEX(PHYSTOP));
-  for(int i = 0; i < INDEX(PHYSTOP); kmem.page_ref[i++] = 1);
-  release(&kmem.lock);
-  // for(int i = (PHYSTOP - KERNBASE) / PGSIZE; i--; kmem.page_ref[i] = 1);
+  // memset(kref.page_ref, 1, INDEX(PHYSTOP));
+  for(int i = 0; i < INDEX(PHYSTOP); kref.page_ref[i++] = 1);
+  release(&kref.lock);
+  initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -61,22 +65,22 @@ kfree(void *pa)
     panic("kfree");
 
   r = (struct run*)pa;
-  acquire(&kmem.lock);
-  // update page ref count and free the physical page when no ref exits
-  switch(kmem.page_ref[INDEX(pa)]){
-    case 0:
-      release(&kmem.lock);
+  char ref;
+  acquire(&kref.lock);
+  if((ref = kref.page_ref[INDEX(pa)]--) == 0){
+      kref.page_ref[INDEX(pa)] = 0;
       panic("kfree: double free");
-    case 1:
-      r->next = kmem.freelist;
-      kmem.freelist = r;
-      // Fill with junk to catch dangling refs.
-      memset(pa, 1, PGSIZE);
-    default:
-      --kmem.page_ref[INDEX(pa)];
-      break;
   }
-  release(&kmem.lock);
+  release(&kref.lock);
+  if(ref == 1){  
+    memset(pa, 1, PGSIZE);
+    // update page ref count and free the physical page when no ref exits
+    acquire(&kmem.lock);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+    // Fill with junk to catch dangling refs.
+    release(&kmem.lock);
+  }
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -89,28 +93,32 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r){
+  if(r)
     kmem.freelist = r->next;
-    kmem.page_ref[INDEX(r)] = 1; // set page ref to 1
-  }
   release(&kmem.lock);
 
-  if(r)
+  
+
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    acquire(&kref.lock);
+    kref.page_ref[INDEX(r)] = 1; // set page ref to 1
+    release(&kref.lock);
+  }
   return (void*)r;
 }
 
-int kref(uint64 pa, char change){ // change: 0 return current ref count; else increment ref count by 1
+int kaddref(uint64 pa, char change){ // change: 0 return current ref count; else increment ref count by 1
   if(change != 0){
-    acquire(&kmem.lock);
-    if(++kmem.page_ref[INDEX(pa)] == 1){
-      release(&kmem.lock);
+    acquire(&kref.lock);
+    if(++kref.page_ref[INDEX(pa)] == 1){
+      release(&kref.lock);
       panic("kref: trying to refer to an unalloced page!");
     }
-    release(&kmem.lock);
+    release(&kref.lock);
   }
 
-  return kmem.page_ref[INDEX(pa)];
+  return kref.page_ref[INDEX(pa)];
 }
 
 // alloc a new page(writable) and copy the content into it
