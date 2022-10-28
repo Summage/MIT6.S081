@@ -14,7 +14,7 @@ void freerange(void *pa_start, void *pa_end);
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
-#define INDEX(pa) (((uint64)pa-PGROUNDUP((uint64)end))/PGSIZE)
+#define INDEX(pa) (((uint64)pa-PGROUNDUP((uint64)KERNBASE))/PGSIZE)
 
 struct run {
   struct run *next;
@@ -23,7 +23,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-  uint8 page_ref[(PHYSTOP - KERNBASE) / PGSIZE];
+  uint8 page_ref[(PHYSTOP - PGROUNDUP(KERNBASE)) / PGSIZE];
 } kmem;
 
 void
@@ -32,7 +32,8 @@ kinit()
   initlock(&kmem.lock, "kmem");
   acquire(&kmem.lock);
   // set all pages` ref count to 1 so that kfree can work properly
-  memset(kmem.page_ref, 1, INDEX(PHYSTOP));
+  // memset(kmem.page_ref, 1, INDEX(PHYSTOP));
+  for(int i = 0; i < INDEX(PHYSTOP); kmem.page_ref[i++] = 1);
   release(&kmem.lock);
   // for(int i = (PHYSTOP - KERNBASE) / PGSIZE; i--; kmem.page_ref[i] = 1);
   freerange(end, (void*)PHYSTOP);
@@ -64,6 +65,7 @@ kfree(void *pa)
   // update page ref count and free the physical page when no ref exits
   switch(kmem.page_ref[INDEX(pa)]){
     case 0:
+      release(&kmem.lock);
       panic("kfree: double free");
     case 1:
       r->next = kmem.freelist;
@@ -99,15 +101,16 @@ kalloc(void)
 }
 
 int kref(uint64 pa, char change){ // change: 0 return current ref count; else increment ref count by 1
-  int index = (pa - KERNBASE) / PGSIZE;
   if(change != 0){
     acquire(&kmem.lock);
-    if(++kmem.page_ref[index] == 1)
+    if(++kmem.page_ref[INDEX(pa)] == 1){
+      release(&kmem.lock);
       panic("kref: trying to refer to an unalloced page!");
+    }
     release(&kmem.lock);
   }
 
-  return kmem.page_ref[index];
+  return kmem.page_ref[INDEX(pa)];
 }
 
 // alloc a new page(writable) and copy the content into it

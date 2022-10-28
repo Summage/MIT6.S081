@@ -76,6 +76,7 @@ usertrap(void)
       setkilled(p);
       goto usertrap_kill;
     }
+    
     pte_t * pte = walk(p->pagetable, va, 0);
     if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_C) == 0 || (*pte & PTE_U) == 0){
       printf("usertrap(): writing to an invalid va scause %p pid=%d\n", r_scause(), p->pid);

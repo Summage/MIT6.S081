@@ -316,9 +316,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    kref(pa, 1); // add a ref to the target physical page
     *pte = (*pte & ~PTE_W) | PTE_C; // both parent and child page should be dis-writable and be marked as COW
     flags = PTE_FLAGS(*pte); 
-    kref(pa, 1); // add a ref to the target physical page
     mem = PTE2PA(*pte);
     if(mappages(new, i, PGSIZE, mem, flags) != 0){
       kfree((void*)mem);
