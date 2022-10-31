@@ -1,6 +1,4 @@
 # 6.S081
-完成: util, syscall
-进行中: pgtbl
+完成: util,syscall,pgtbl,lazy,cow,thread
+进行中: network
 
-> 碎碎念
-> 考试月好忙,这两天赶了两个lab该去肝DDL了
