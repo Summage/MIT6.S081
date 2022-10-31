@@ -48,7 +48,7 @@ thread_init(void)
   // a RUNNABLE thread.
   current_thread = &all_thread[0];
   current_thread->state = RUNNING;
-  current_thread->context.sp = (uint64)current_thread->stack;
+  current_thread->context.sp = (uint64)current_thread->stack+STACK_SIZE-1;
 }
 
 void 
@@ -98,7 +98,7 @@ thread_create(void (*func)())
   t->state = RUNNABLE;
   // YOUR CODE HERE
   t->context.ra = (uint64)func;
-  t->context.sp = (uint64)t->stack; // 指向栈底还是栈顶？
+  t->context.sp = (uint64)t->stack+STACK_SIZE-1; 
 }
 
 void 
