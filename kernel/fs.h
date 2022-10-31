@@ -38,20 +38,15 @@ struct dinode {
   uint addrs[NDIRECT+1];   // Data block addresses
 };
 
-// Inodes per block.
-#define IPB           (BSIZE / sizeof(struct dinode))
+#define IPB           (BSIZE / sizeof(struct dinode)) // 每块的inode个数
 
-// Block containing inode i
-#define IBLOCK(i, sb)     ((i) / IPB + sb.inodestart)
+#define IBLOCK(i, sb)     ((i) / IPB + sb.inodestart) // inode所在block
 
-// Bitmap bits per block
-#define BPB           (BSIZE*8)
+#define BPB           (BSIZE*8) // 每个块包含的bitmap指示位（一字节8位）
 
-// Block of free map containing bit for block b
-#define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart)
+#define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart) // 指定block的bitmap指示位地址
 
-// Directory is a file containing a sequence of dirent structures.
-#define DIRSIZ 14
+#define DIRSIZ 14 // 路径名长度,路径是由dirent(dir entry)序列组成的文件
 
 struct dirent {
   ushort inum;

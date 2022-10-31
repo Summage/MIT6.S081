@@ -24,7 +24,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 // there should be one superblock per disk device, but we run with
 // only one device
-struct superblock sb; 
+struct superblock sb; // 超级块与磁盘一一对应但是此处只有一个磁盘
 
 // Read the super block.
 static void
@@ -68,15 +68,15 @@ balloc(uint dev)
   struct buf *bp;
 
   bp = 0;
-  for(b = 0; b < sb.size; b += BPB){
-    bp = bread(dev, BBLOCK(b, sb));
-    for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
-      m = 1 << (bi % 8);
+  for(b = 0; b < sb.size; b += BPB){ // 以BPB为单位的外部大循环，sb.size为数据块大小
+    bp = bread(dev, BBLOCK(b, sb)); // 获取块对应bitmap位置
+    for(bi = 0; bi < BPB && b + bi < sb.size; bi++){ // 内部小循环，查找BPB内的空闲块
+      m = 1 << (bi % 8); // mask
       if((bp->data[bi/8] & m) == 0){  // Is block free?
         bp->data[bi/8] |= m;  // Mark block in use.
         log_write(bp);
         brelse(bp);
-        bzero(dev, b + bi);
+        bzero(dev, b + bi); // 清零
         return b + bi;
       }
     }
@@ -174,13 +174,13 @@ bfree(int dev, uint b)
 struct {
   struct spinlock lock;
   struct inode inode[NINODE];
-} itable;
+} itable; // 活跃inode表
 
 void
 iinit()
 {
   int i = 0;
-  
+
   initlock(&itable.lock, "itable");
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&itable.inode[i].lock, "inode");
@@ -200,14 +200,14 @@ ialloc(uint dev, short type)
   struct dinode *dip;
 
   for(inum = 1; inum < sb.ninodes; inum++){
-    bp = bread(dev, IBLOCK(inum, sb));
-    dip = (struct dinode*)bp->data + inum%IPB;
+    bp = bread(dev, IBLOCK(inum, sb)); // 查找inode所在块
+    dip = (struct dinode*)bp->data + inum%IPB; // 获取inode内容
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
-      return iget(dev, inum);
+      return iget(dev, inum); // 激活节点
     }
     brelse(bp);
   }
@@ -236,17 +236,17 @@ iupdate(struct inode *ip)
   brelse(bp);
 }
 
-// Find the inode with number inum on device dev
-// and return the in-memory copy. Does not lock
-// the inode and does not read it from disk.
+// 在激活inode表上查找或回收分配一个项目
+// 返回内容未同步磁盘也不持有锁
+// 主要是保证他是激活状态
 static struct inode*
 iget(uint dev, uint inum)
 {
   struct inode *ip, *empty;
 
-  acquire(&itable.lock);
+  acquire(&itable.lock); 
 
-  // Is the inode already in the table?
+  // 当前inode是否已被激活
   empty = 0;
   for(ip = &itable.inode[0]; ip < &itable.inode[NINODE]; ip++){
     if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
@@ -258,7 +258,7 @@ iget(uint dev, uint inum)
       empty = ip;
   }
 
-  // Recycle an inode entry.
+  // 回收空余激活节点
   if(empty == 0)
     panic("iget: no inodes");
 
@@ -272,8 +272,7 @@ iget(uint dev, uint inum)
   return ip;
 }
 
-// Increment reference count for ip.
-// Returns ip to enable ip = idup(ip1) idiom.
+// 增加ip引用，返回传入的指针
 struct inode*
 idup(struct inode *ip)
 {
@@ -283,8 +282,7 @@ idup(struct inode *ip)
   return ip;
 }
 
-// Lock the given inode.
-// Reads the inode from disk if necessary.
+// 获取inode锁,并保证其(数据有效性)已从磁盘读入数据
 void
 ilock(struct inode *ip)
 {

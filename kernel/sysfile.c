@@ -244,27 +244,29 @@ create(char *path, short type, short major, short minor)
   struct inode *ip, *dp;
   char name[DIRSIZ];
 
-  if((dp = nameiparent(path, name)) == 0)
+  if((dp = nameiparent(path, name)) == 0) // 文件所在目录不存在报错
     return 0;
 
-  ilock(dp);
+  ilock(dp); // 获取该目录层次的锁
 
-  if((ip = dirlookup(dp, name, 0)) != 0){
-    iunlockput(dp);
-    ilock(ip);
+  if((ip = dirlookup(dp, name, 0)) != 0){ // 若存在同名文件
+    iunlockput(dp); // 释放目录锁
+    ilock(ip); // 获取文件锁
     if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
-      return ip;
-    iunlockput(ip);
+      return ip; // 以上情况接受重名
+    iunlockput(ip); // 否则视为冲突
     return 0;
   }
 
+  // 分配文件编号:遍历找到空闲编号,标记类型为file并调用log_write
+  // 此操作在查看inode在磁盘中状态时会获得锁,进程安全
   if((ip = ialloc(dp->dev, type)) == 0)
     panic("create: ialloc");
 
   ilock(ip);
   ip->major = major;
   ip->minor = minor;
-  ip->nlink = 1;
+  ip->nlink = 1; // 设置连接数
   iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
@@ -393,7 +395,7 @@ sys_chdir(void)
   char path[MAXPATH];
   struct inode *ip;
   struct proc *p = myproc();
-  
+
   begin_op();
   if(argstr(0, path, MAXPATH) < 0 || (ip = namei(path)) == 0){
     end_op();

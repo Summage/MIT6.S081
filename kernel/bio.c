@@ -52,9 +52,7 @@ binit(void)
   }
 }
 
-// Look through buffer cache for block on device dev.
-// If not found, allocate a buffer.
-// In either case, return locked buffer.
+// 查找/分配缓存块,返回已持有锁的缓存块
 static struct buf*
 bget(uint dev, uint blockno)
 {
@@ -72,13 +70,12 @@ bget(uint dev, uint blockno)
     }
   }
 
-  // Not cached.
-  // Recycle the least recently used (LRU) unused buffer.
+  // 反向查找(LRU),仅占用未被引用的缓存块,从而保证了block锁的有效性
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
     if(b->refcnt == 0) {
       b->dev = dev;
       b->blockno = blockno;
-      b->valid = 0;
+      b->valid = 0; // 尚未与磁盘内容同步,无效
       b->refcnt = 1;
       release(&bcache.lock);
       acquiresleep(&b->lock);
@@ -88,21 +85,21 @@ bget(uint dev, uint blockno)
   panic("bget: no buffers");
 }
 
-// Return a locked buf with the contents of the indicated block.
+// 返回带锁的缓冲块,且内容已与磁盘同步
 struct buf*
 bread(uint dev, uint blockno)
 {
   struct buf *b;
 
   b = bget(dev, blockno);
-  if(!b->valid) {
+  if(!b->valid) { // 从磁盘中读入数据
     virtio_disk_rw(b, 0);
     b->valid = 1;
   }
   return b;
 }
 
-// Write b's contents to disk.  Must be locked.
+// 带锁情况下将缓存写回
 void
 bwrite(struct buf *b)
 {
@@ -113,6 +110,7 @@ bwrite(struct buf *b)
 
 // Release a locked buffer.
 // Move to the head of the most-recently-used list.
+// 由于只释放引用为0的块,所以LRU可以放宽到以引用下降到0而非实际修改时间判断
 void
 brelse(struct buf *b)
 {
@@ -136,6 +134,7 @@ brelse(struct buf *b)
   release(&bcache.lock);
 }
 
+// 增加/减少引用
 void
 bpin(struct buf *b) {
   acquire(&bcache.lock);
