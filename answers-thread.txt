@@ -1,0 +1,4 @@
+when there is only one thread, it`s the only provider.
+Given the hash table is properly implented and handled key collasion, there will be no missing.
+
+However, when there is more than one thread, they may concurrently get a same item for modification or creation. So only one out of them will survive, but not predictable.
