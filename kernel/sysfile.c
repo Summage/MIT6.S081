@@ -317,7 +317,29 @@ sys_open(void)
       return -1;
     }
   }
+  if(ip->type == T_SYMLINK && (omode & O_NOFOLLOW) == 0){
+    char buf[MAXPATH], count = 0;
+    do{
+      if(readi(ip, 0, (uint64)buf, 0, ip->size) != ip->size){
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
 
+      iunlockput(ip);
+
+      if((ip = namei(buf)) == 0){
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+    }while(ip->type == T_SYMLINK && ++count < 30);
+    if(ip->type == T_SYMLINK){
+      iunlockput(ip);
+      end_op();
+      return -2;
+    }
+  }
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
     end_op();
@@ -484,5 +506,26 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64 sys_symlink(void){
+  char target[MAXPATH], linkpath[MAXPATH];
+  int len;
+  if((len = argstr(0, target, MAXPATH)) < 0 || (argstr(1, linkpath, MAXPATH)) < 0)
+    return -1;
+  begin_op();
+  struct inode * ip = create((char *)linkpath, T_SYMLINK, 0, 0);
+  if(ip == 0){
+    end_op();
+    return -1;
+  }
+  if(writei(ip, 0, (uint64)target, 0, len) < len){
+    iunlock(ip);
+    end_op();
+    return -1;
+  }
+  iunlock(ip);
+  end_op();
   return 0;
 }
