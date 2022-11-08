@@ -26,7 +26,7 @@
 // only one device
 struct superblock sb; // 超级块与磁盘一一对应但是此处只有一个磁盘
 
-// Read the super block.
+// 读取superblock(块号为1)
 static void
 readsb(int dev, struct superblock *sb)
 {
@@ -37,7 +37,7 @@ readsb(int dev, struct superblock *sb)
   brelse(bp);
 }
 
-// Init fs
+// 读取superblock,匹配魔数.并初始化log系统
 void
 fsinit(int dev) {
   readsb(dev, &sb);
@@ -46,7 +46,7 @@ fsinit(int dev) {
   initlog(dev, &sb);
 }
 
-// Zero a block.
+// 将块填零
 static void
 bzero(int dev, int bno)
 {
@@ -68,7 +68,9 @@ balloc(uint dev)
   struct buf *bp;
 
   bp = 0;
-  for(b = 0; b < sb.size; b += BPB){ // 以BPB为单位的外部大循环，sb.size为数据块大小
+  // 以磁盘块中标志位数量为单位的外部大循环，sb.size为数据块大小
+  // 即内层循环在同一个sb块中进行
+  for(b = 0; b < sb.size; b += BPB){ 
     bp = bread(dev, BBLOCK(b, sb)); // 获取块对应bitmap位置
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){ // 内部小循环，查找BPB内的空闲块
       m = 1 << (bi % 8); // mask
@@ -85,7 +87,7 @@ balloc(uint dev)
   panic("balloc: out of blocks");
 }
 
-// Free a disk block.
+// 释放磁盘块:清除bitmap位,记录log,释放在内存中的缓存块.
 static void
 bfree(int dev, uint b)
 {
@@ -103,21 +105,11 @@ bfree(int dev, uint b)
 }
 
 // Inodes.
-//
-// An inode describes a single unnamed file.
-// The inode disk structure holds metadata: the file's type,
-// its size, the number of links referring to it, and the
-// list of blocks holding the file's content.
-//
-// The inodes are laid out sequentially on disk at
-// sb.startinode. Each inode has a number, indicating its
-// position on the disk.
-//
-// The kernel keeps a table of in-use inodes in memory
-// to provide a place for synchronizing access
-// to inodes used by multiple processes. The in-memory
-// inodes include book-keeping information that is
-// not stored on disk: ip->ref and ip->valid.
+// inode描述了一个未命名文件
+// 该结构体保存了元数据:文件类型,大小,链接数,保存数据的磁盘块的列表
+// 
+// inodes顺序的保存在sb.startinode,由唯一的数字标识位置偏移 
+// 内核在内存中维护了使用中的inode表，其中有ip->ref ip->valide这未保存在磁盘中的信息
 //
 // An inode and its in-memory representation go through a
 // sequence of states before they can be used by the
@@ -399,6 +391,27 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+  bn -= NINDIRECT;
+  if(bn < NDOUBLEINDIRECT){
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if((addr = a[bn/NINDIRECT]) == 0){
+      a[bn/NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+    if((addr = a[bn%NINDIRECT]) == 0){
+      a[bn%NINDIRECT] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    brelse(bp);
+    return addr;
+  }
+
   panic("bmap: out of range");
 }
 
@@ -407,9 +420,9 @@ bmap(struct inode *ip, uint bn)
 void
 itrunc(struct inode *ip)
 {
-  int i, j;
-  struct buf *bp;
-  uint *a;
+  int i, j, k;
+  struct buf *bp, *bp_;
+  uint *a, *b;
 
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
@@ -428,6 +441,27 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if(ip->addrs[NDIRECT+1]){
+    // first layer
+    bp = bread(ip->dev, ip->addrs[NDIRECT+1]);
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; ++j){
+      if(a[j]){
+        // second layer
+        bp_ = bread(ip->dev, a[j]);
+        b = (uint*)bp_->data;
+        for(k = 0; k < NINDIRECT; ++k){
+          if(b[k])
+            bfree(ip->dev, b[k]);
+        }
+        brelse(bp_);
+        bfree(ip->dev, a[j]);
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT+1]);
   }
 
   ip->size = 0;

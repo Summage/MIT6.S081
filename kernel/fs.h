@@ -24,9 +24,10 @@ struct superblock {
 
 #define FSMAGIC 0x10203040
 
-#define NDIRECT 12
+#define NDIRECT 11
 #define NINDIRECT (BSIZE / sizeof(uint))
-#define MAXFILE (NDIRECT + NINDIRECT)
+#define NDOUBLEINDIRECT (NINDIRECT * NINDIRECT)
+#define MAXFILE (NDIRECT + NINDIRECT+ NDOUBLEINDIRECT)
 
 // On-disk inode structure
 struct dinode {
@@ -35,18 +36,18 @@ struct dinode {
   short minor;          // Minor device number (T_DEVICE only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
-  uint addrs[NDIRECT+1];   // Data block addresses
+  uint addrs[NDIRECT+2];   // Data block addresses
 };
-
-#define IPB           (BSIZE / sizeof(struct dinode)) // 每块的inode个数
-
-#define IBLOCK(i, sb)     ((i) / IPB + sb.inodestart) // inode所在block
-
-#define BPB           (BSIZE*8) // 每个块包含的bitmap指示位（一字节8位）
-
-#define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart) // 指定block的bitmap指示位地址
-
-#define DIRSIZ 14 // 路径名长度,路径是由dirent(dir entry)序列组成的文件
+// 每块的inode个数
+#define IPB           (BSIZE / sizeof(struct dinode)) 
+// inode所在block
+#define IBLOCK(i, sb)     ((i) / IPB + sb.inodestart)
+// 每个块包含的bitmap指示位（一字节8位）
+#define BPB           (BSIZE*8) 
+// 指定block的bitmap指示位地址
+#define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart) 
+// 路径名长度,路径是由dirent(dir entry)序列组成的文件
+#define DIRSIZ 14 
 
 struct dirent {
   ushort inum;
