@@ -98,57 +98,41 @@ bget(uint dev, uint blockno)
 
   release(&bbucket[bid].lock);
   acquire(&bcache.lock);
-  acquire(&bbucket[bid].lock);
-  if((b = _bget(dev, blockno, bid)) != 0){
-    release(&bcache.lock);
-    return b;
-  }
+
   
   // Not cached.
   if(bcache.rest != 0){
     b = &bcache.buf[GET_UNUSEDBUF(bcache.rest)];
     --bcache.rest;
-    b->dev = dev;
-    b->blockno = blockno;
-    b->valid = 0;
-    b->refcnt = 1;
-    b->next = bbucket[bid].head;
-    bbucket[bid].head = b;
-    release(&bbucket[bid].lock);
-    release(&bcache.lock);
-    acquiresleep(&b->lock);
-    return b;
+  }else{
+    for(int i = 1; i < NBUCKET; ++i){
+      acquire(&bbucket[(bid+i)%NBUCKET].lock);
+      for(b = bbucket[(bid+i)%NBUCKET].head; b; b = b->next){
+        if(b->refcnt == 0) {
+          if(b->prev)
+            b->prev->next = b->next;
+          else
+            bbucket[(bid+i)%NBUCKET].head = b->next;
+          if(b->next)
+            b->next->prev = b->prev;
+          release(&bbucket[(bid+i)%NBUCKET].lock);
+          goto bget_break;
+        }
+      }
+      release(&bbucket[(bid+i)%NBUCKET].lock);
+    }
   }
 
-  for(int i = 1; i < NBUCKET; ++i){
-    if(i == bid)
-      continue;
-    acquire(&bbucket[(bid+i)%NBUCKET].lock);
-    for(b = bbucket[(bid+i)%NBUCKET].head; b; b = b->next){
-      if(b->refcnt == 0) {
-        b->dev = dev;
-        b->blockno = blockno;
-        b->valid = 0;
-        b->refcnt = 1;
-
-        if(b->prev)
-          b->prev->next = b->next;
-        else
-          bbucket[(bid+i)%NBUCKET].head = b->next;
-        if(b->next)
-          b->next->prev = b->prev;
-        release(&bbucket[(bid+i)%NBUCKET].lock);
-
-        b->next = bbucket[bid].head;
-        b->prev = 0;
-        bbucket[bid].head = b;
-        release(&bbucket[bid].lock);
-        release(&bcache.lock);
-        acquiresleep(&b->lock);
-        return b;
-      }
-    }
-    release(&bbucket[(bid+i)%NBUCKET].lock);
+bget_break:
+  acquire(&bbucket[bid].lock);
+  if(b){
+    b->next = bbucket[bid].head;
+    b->prev = 0;
+    bbucket[bid].head = b;
+  }
+  if((b = _bget(dev, blockno, bid)) != 0){
+    release(&bcache.lock);
+    return b;
   }
   panic("bget: no buffers");
 }
