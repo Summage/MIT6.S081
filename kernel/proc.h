@@ -81,6 +81,19 @@ struct trapframe {
 };
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+#define VMANUM 16
+struct VMA{
+  uint64 cur_addr;
+  uint64 init_addr; // only used to locate the bitmap`s bit
+  uint64 length;
+  uint64 offset;
+  int prot;
+  int perm;
+  int flags;
+  struct file * file;
+  char used;
+  char * bitmap;
+};
 
 // Per-process state
 struct proc {
@@ -100,6 +113,7 @@ struct proc {
   uint64 kstack;               // Virtual address of kernel stack
   uint64 sz;                   // Size of process memory (bytes)
   pagetable_t pagetable;       // User page table
+  struct VMA VMA[VMANUM];
   struct trapframe *trapframe; // data page for trampoline.S
   struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files

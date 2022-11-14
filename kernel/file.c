@@ -180,3 +180,12 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+uint64 freadi(struct file * file, int user_dst, uint64 addr, uint64 offset, uint64 size){
+  if(!file)
+    return 0;
+  uint64 n;
+  ilock(file->ip);
+  n = readi(file->ip, user_dst, addr, offset, size);
+  iunlock(file->ip);
+  return n;
+}

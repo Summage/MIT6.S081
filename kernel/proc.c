@@ -300,6 +300,16 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+  for(int i = 0; i < VMANUM; ++i){
+    if(p->VMA[i].used){
+      np->VMA[i] = p->VMA[i];
+      np->VMA[i].bitmap = kalloc();
+      for(int idx = 0; idx < PGSIZE/8; ++idx)
+        np->VMA[i].bitmap[idx] = p->VMA[i].bitmap[idx];
+      np->VMA[i].file = filedup(p->VMA[i].file);
+    }
+  }
+
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -653,4 +663,16 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// check whether the va is in the range of the given vma
+struct VMA * findvma(uint64 va){
+  struct VMA * vma = myproc()->VMA;
+  for(int i = VMANUM; i--; ++vma){
+    if(vma->used){
+      if(va >= vma->cur_addr && va < vma->cur_addr+vma->length)
+        return vma;
+    }
+  }
+  return 0;
 }

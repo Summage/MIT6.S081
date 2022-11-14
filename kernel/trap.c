@@ -5,7 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-
+struct inode;
 struct spinlock tickslock;
 uint ticks;
 
@@ -67,7 +67,32 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if((r_scause()|0b10) == 0xf){// not a leaf, given that mmap set pages perm with 0 at first
+    uint64 va = PGROUNDUP(r_stval());
+    struct VMA * vma;
+    if(!(vma = findvma(va)))
+      goto usertrap_unhandled;
+
+    char * mem = kalloc();
+    if(mem == 0){
+      printf("usertrap: failed to alloc a page for mmap\n");
+      p->killed = 1;
+    }else{// assume that pipe aren`t mmap-ed
+      memset((void *)mem, 0, PGSIZE);
+      if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, vma->perm)){
+        printf("usertrap: failed to map page for mmap\n");
+        p->killed = 1;
+      }else{
+        if(!freadi(vma->file, 0, (uint64)mem, (va-vma->init_addr+vma->offset), PGSIZE)){
+          printf("usertrap: failed to read the original file in the mmap\n");
+          p->killed = 1;
+        }
+      }
+      uint pos = (PGROUNDDOWN(va)-vma->init_addr)/PGSIZE;
+      vma->bitmap[pos/8] |= (1ull<<(pos%8));
+    }
   } else {
+usertrap_unhandled:
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;

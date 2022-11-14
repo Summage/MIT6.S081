@@ -1,3 +1,5 @@
+#define size_t unsigned long long
+#define off_t size_t
 struct stat;
 struct rtcdate;
 

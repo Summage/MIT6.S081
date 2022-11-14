@@ -484,3 +484,99 @@ sys_pipe(void)
   }
   return 0;
 }
+
+static inline int prot2perm(int prot){
+  int perm = PTE_U;
+  if(prot & PROT_WRITE)
+    perm |= PTE_W;
+  if(prot & PROT_READ)
+    perm |= PTE_R;
+  if(prot & PROT_EXEC)
+    perm |= PTE_X;
+  return perm;
+}
+
+uint64
+sys_mmap(void){
+  uint64 length, offset;
+  int prot, flags, fd;
+  struct file * file;
+  if(argaddr(1, &length) < 0 || argint(2, &prot) < 0 || argint(3, &flags) < 0 || argfd(4, &fd, &file) < 0 || argaddr(5, &offset))
+    return -1;
+  if(!length || (!file->writable && (flags & MAP_SHARED) && (prot & PROT_WRITE)))
+    return -1;
+
+  struct proc * p = myproc();
+  struct VMA * vma = p->VMA;
+  for(int i = VMANUM; i--; ++vma){
+    if(vma->used)
+      continue;
+    vma->cur_addr = vma->init_addr = PGROUNDUP(p->sz);
+    vma->length = length;
+    vma->offset = offset;
+    vma->prot = prot;
+    vma->perm = prot2perm(prot);
+    vma->flags = flags;
+    vma->file = filedup(file);
+    vma->used = 1;
+    p->sz = PGROUNDUP(vma->cur_addr + vma->length);
+    vma->bitmap = kalloc();
+    memset(vma->bitmap, 0, PGSIZE);
+    printf("vma used%d\n", (vma-p->VMA)/sizeof(struct VMA));
+    return vma->cur_addr;
+  }
+  return -1;
+}
+
+uint64
+sys_munmap(void){
+  printf("calling unmap\n");
+  uint64 addr, length;
+  if(argaddr(0, &addr) < 0 || argaddr(1, &length) < 0)
+    return -1;
+  if(addr % PGSIZE || !length)
+    return -1;
+  struct VMA * vma = findvma(addr);
+  if(vma == 0)
+    return 0;
+  addr = length+addr;
+  
+  length = (addr > vma->cur_addr + vma->length) ? addr-vma->cur_addr : vma->length;
+  vma->length -= length;
+  struct proc * p = myproc();
+  char writeback = (vma->flags & MAP_SHARED && vma->prot & PROT_WRITE);
+  uint64 r, n, pos = (vma->cur_addr-vma->init_addr)/PGSIZE;
+
+  while(length){
+    n = (length > PGSIZE) ? PGSIZE : length;
+    if(!(vma->bitmap[pos/8] & (1ull << (pos % 8)))){
+      ++pos;
+      vma->cur_addr += n;
+      length -= n;
+      continue;
+    }
+    if(writeback){
+      begin_op();
+      ilock(vma->file->ip);
+      r = writei(vma->file->ip, 1, vma->cur_addr, vma->offset+vma->cur_addr-vma->init_addr, n);
+      iunlock(vma->file->ip);
+      end_op();
+      if(r != n)
+        break;
+    }
+    uvmunmap(p->pagetable, vma->cur_addr, 1, 1);
+    vma->bitmap[pos/8] &= ~(1ull << (pos%8));
+    ++pos;
+    vma->cur_addr += n;
+    length -= n;
+  }
+  if(length)
+    panic("sys_munmap: write failed\n");
+  if(!vma->length){
+    fileclose(vma->file);
+    vma->used = 0;
+    kfree(vma->bitmap);
+    printf("vma released %d\n", (vma-p->VMA)/sizeof(struct VMA));
+  }
+  return 0;
+}

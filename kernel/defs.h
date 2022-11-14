@@ -8,7 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
-
+struct VMA;
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -26,6 +26,7 @@ void            consputc(int);
 int             exec(char*, char**);
 
 // file.c
+uint64          freadi(struct file*, int, uint64, uint64, uint64);
 struct file*    filealloc(void);
 void            fileclose(struct file*);
 struct file*    filedup(struct file*);
@@ -82,6 +83,7 @@ void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
 
 // proc.c
+struct VMA *    findvma(uint64);
 int             cpuid(void);
 void            exit(int);
 int             fork(void);
@@ -154,6 +156,7 @@ void            uartputc_sync(int);
 int             uartgetc(void);
 
 // vm.c
+pte_t *         walk(pagetable_t, uint64, int);
 void            kvminit(void);
 void            kvminithart(void);
 void            kvmmap(pagetable_t, uint64, uint64, uint64, int);
