@@ -128,6 +128,8 @@ bget_break:
   if(b){
     b->next = bbucket[bid].head;
     b->prev = 0;
+    if(bbucket[bid].head)
+      bbucket[bid].head->prev = b;
     bbucket[bid].head = b;
   }
   if((b = _bget(dev, blockno, bid)) != 0){
